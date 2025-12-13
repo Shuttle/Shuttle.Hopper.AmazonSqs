@@ -1,0 +1,7 @@
+{
+  "profiles": {
+    "Shuttle.Hopper.AmazonSqs.Tests": {
+      "commandName": "Project"
+    }
+  }
+}
