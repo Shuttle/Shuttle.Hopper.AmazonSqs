@@ -314,14 +314,14 @@ public class AmazonSqsQueue(ServiceBusOptions serviceBusOptions, AmazonSqsOption
         }
         catch (OperationCanceledException)
         {
-            await _serviceBusOptions.TransportOperation.InvokeAsync(new(this, "[is-empty/cancelled]", true), cancellationToken);
+            await _serviceBusOptions.TransportOperation.InvokeAsync(new(this, "[is-empty/cancelled]", false), cancellationToken);
         }
         finally
         {
             _lock.Release();
         }
 
-        return true;
+        return false;
     }
 
     public async Task ReleaseAsync(object acknowledgementToken, CancellationToken cancellationToken = default)
