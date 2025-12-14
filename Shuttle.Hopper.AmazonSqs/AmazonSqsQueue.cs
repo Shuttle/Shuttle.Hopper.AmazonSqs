@@ -308,13 +308,13 @@ public class AmazonSqsQueue(ServiceBusOptions serviceBusOptions, AmazonSqsOption
                 response.ApproximateNumberOfMessages > 0 &&
                 response is { ApproximateNumberOfMessagesDelayed: > 0, ApproximateNumberOfMessagesNotVisible: > 0 };
 
-            await _serviceBusOptions.TransportOperation.InvokeAsync(new(this, "[is-empty]", result), cancellationToken);
+            await _serviceBusOptions.TransportOperation.InvokeAsync(new(this, "[has-pending]", result), cancellationToken);
 
             return result;
         }
         catch (OperationCanceledException)
         {
-            await _serviceBusOptions.TransportOperation.InvokeAsync(new(this, "[is-empty/cancelled]", false), cancellationToken);
+            await _serviceBusOptions.TransportOperation.InvokeAsync(new(this, "[has-pending/cancelled]", false), cancellationToken);
         }
         finally
         {
