@@ -7,7 +7,7 @@ public static class HopperBuilderExtensions
 {
     extension(HopperBuilder hopperBuilder)
     {
-        public IServiceCollection UseAmazonSqs(Action<AmazonSqsBuilder>? builder = null)
+        public HopperBuilder UseAmazonSqs(Action<AmazonSqsBuilder>? builder = null)
         {
             var services = hopperBuilder.Services;
 
@@ -48,7 +48,7 @@ public static class HopperBuilderExtensions
 
             services.AddSingleton<ITransportFactory, AmazonSqsQueueFactory>();
 
-            return services;
+            return hopperBuilder;
         }
     }
 }
