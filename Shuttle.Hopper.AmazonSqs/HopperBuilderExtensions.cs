@@ -1,17 +1,15 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Options;
 using Shuttle.Core.Contract;
 
 namespace Shuttle.Hopper.AmazonSqs;
 
-public static class ServiceCollectionExtensions
+public static class HopperBuilderExtensions
 {
-    extension(IServiceCollection services)
+    extension(HopperBuilder hopperBuilder)
     {
-        public IServiceCollection AddAmazonSqs(Action<AmazonSqsBuilder>? builder = null)
+        public IServiceCollection UseAmazonSqs(Action<AmazonSqsBuilder>? builder = null)
         {
-            Guard.AgainstNull(services);
+            var services = hopperBuilder.Services;
 
             var amazonSqsBuilder = new AmazonSqsBuilder(services);
 
@@ -48,7 +46,7 @@ public static class ServiceCollectionExtensions
                 });
             }
 
-            services.TryAddSingleton<ITransportFactory, AmazonSqsQueueFactory>();
+            services.AddSingleton<ITransportFactory, AmazonSqsQueueFactory>();
 
             return services;
         }

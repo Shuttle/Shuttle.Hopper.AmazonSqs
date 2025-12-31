@@ -5,7 +5,7 @@ using Shuttle.Core.Streams;
 
 namespace Shuttle.Hopper.AmazonSqs;
 
-public class AmazonSqsQueue(ServiceBusOptions serviceBusOptions, AmazonSqsOptions amazonSqsOptions, TransportUri uri)
+public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazonSqsOptions, TransportUri uri)
     : ITransport, ICreateTransport, IDeleteTransport, IPurgeTransport, IDisposable
 {
     private readonly Dictionary<string, AcknowledgementToken> _acknowledgementTokens = new();
@@ -25,14 +25,14 @@ public class AmazonSqsQueue(ServiceBusOptions serviceBusOptions, AmazonSqsOption
     private readonly SemaphoreSlim _lock = new(1, 1);
     private readonly TimeSpan _operationTimeout = TimeSpan.FromSeconds(30);
     private readonly Queue<ReceivedMessage> _receivedMessages = new();
-    private readonly ServiceBusOptions _serviceBusOptions = Guard.AgainstNull(serviceBusOptions);
+    private readonly HopperOptions _hopperOptions = Guard.AgainstNull(hopperOptions);
     private bool _initialized;
     private string _queueUrl = string.Empty;
     private bool _queueUrlResolved;
 
     public async Task CreateAsync(CancellationToken cancellationToken = default)
     {
-        await _serviceBusOptions.TransportOperation.InvokeAsync(new(this, "[create/starting]"), cancellationToken);
+        await _hopperOptions.TransportOperation.InvokeAsync(new(this, "[create/starting]"), cancellationToken);
 
         await _lock.WaitAsync(CancellationToken.None).ConfigureAwait(false);
 
@@ -41,15 +41,12 @@ public class AmazonSqsQueue(ServiceBusOptions serviceBusOptions, AmazonSqsOption
             await _client.CreateQueueAsync(new CreateQueueRequest { QueueName = Uri.TransportName }, cancellationToken).ConfigureAwait(false);
             await GetQueueUrl(cancellationToken);
         }
-        catch (OperationCanceledException)
-        {
-        }
         finally
         {
             _lock.Release();
         }
 
-        await _serviceBusOptions.TransportOperation.InvokeAsync(new(this, "[create/completed]"), cancellationToken);
+        await _hopperOptions.TransportOperation.InvokeAsync(new(this, "[create/completed]"), cancellationToken);
     }
 
     public async Task DeleteAsync(CancellationToken cancellationToken = default)
@@ -64,7 +61,7 @@ public class AmazonSqsQueue(ServiceBusOptions serviceBusOptions, AmazonSqsOption
             return;
         }
 
-        await _serviceBusOptions.TransportOperation.InvokeAsync(new(this, "[drop/starting]"), cancellationToken);
+        await _hopperOptions.TransportOperation.InvokeAsync(new(this, "[drop/starting]"), cancellationToken);
 
         await _lock.WaitAsync(CancellationToken.None).ConfigureAwait(false);
 
@@ -72,16 +69,12 @@ public class AmazonSqsQueue(ServiceBusOptions serviceBusOptions, AmazonSqsOption
         {
             await _client.DeleteQueueAsync(new DeleteQueueRequest { QueueUrl = _queueUrl }, cancellationToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
-        {
-            await _serviceBusOptions.TransportOperation.InvokeAsync(new(this, "[drop/cancelled]"), cancellationToken);
-        }
         finally
         {
             _lock.Release();
         }
 
-        await _serviceBusOptions.TransportOperation.InvokeAsync(new(this, "[drop/completed]"), cancellationToken);
+        await _hopperOptions.TransportOperation.InvokeAsync(new(this, "[drop/completed]"), cancellationToken);
     }
 
     public void Dispose()
@@ -97,14 +90,8 @@ public class AmazonSqsQueue(ServiceBusOptions serviceBusOptions, AmazonSqsOption
         {
             foreach (var acknowledgementToken in _acknowledgementTokens.Values)
             {
-                try
-                {
-                    _client.SendMessageAsync(new() { QueueUrl = _queueUrl, MessageBody = acknowledgementToken.MessageBody }).Wait(_operationTimeout);
-                    _client.DeleteMessageAsync(_queueUrl, acknowledgementToken.ReceiptHandle).Wait(_operationTimeout);
-                }
-                catch (OperationCanceledException)
-                {
-                }
+                _client.SendMessageAsync(new() { QueueUrl = _queueUrl, MessageBody = acknowledgementToken.MessageBody }).Wait(_operationTimeout);
+                _client.DeleteMessageAsync(_queueUrl, acknowledgementToken.ReceiptHandle).Wait(_operationTimeout);
             }
 
             _acknowledgementTokens.Clear();
@@ -127,7 +114,7 @@ public class AmazonSqsQueue(ServiceBusOptions serviceBusOptions, AmazonSqsOption
             return;
         }
 
-        await _serviceBusOptions.TransportOperation.InvokeAsync(new(this, "[purge/starting]"), cancellationToken);
+        await _hopperOptions.TransportOperation.InvokeAsync(new(this, "[purge/starting]"), cancellationToken);
 
         await _lock.WaitAsync(CancellationToken.None).ConfigureAwait(false);
 
@@ -135,16 +122,12 @@ public class AmazonSqsQueue(ServiceBusOptions serviceBusOptions, AmazonSqsOption
         {
             await _client.PurgeQueueAsync(new PurgeQueueRequest { QueueUrl = _queueUrl }, cancellationToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
-        {
-            await _serviceBusOptions.TransportOperation.InvokeAsync(new(this, "[purge/cancelled]"), cancellationToken);
-        }
         finally
         {
             _lock.Release();
         }
 
-        await _serviceBusOptions.TransportOperation.InvokeAsync(new(this, "[purge/completed]"), cancellationToken);
+        await _hopperOptions.TransportOperation.InvokeAsync(new(this, "[purge/completed]"), cancellationToken);
     }
 
     public TransportUri Uri { get; } = Guard.AgainstNull(uri);
@@ -177,17 +160,13 @@ public class AmazonSqsQueue(ServiceBusOptions serviceBusOptions, AmazonSqsOption
         try
         {
             await _client.DeleteMessageAsync(_queueUrl, data.ReceiptHandle, cancellationToken).ConfigureAwait(false);
-
-            await _serviceBusOptions.MessageAcknowledged.InvokeAsync(new(this, acknowledgementToken), cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            await _serviceBusOptions.TransportOperation.InvokeAsync(new(this, "[acknowledge/cancelled]"), cancellationToken);
         }
         finally
         {
             _lock.Release();
         }
+
+        await _hopperOptions.MessageAcknowledged.InvokeAsync(new(this, acknowledgementToken), cancellationToken);
     }
 
     public async Task SendAsync(TransportMessage message, Stream stream, CancellationToken cancellationToken = default)
@@ -207,17 +186,13 @@ public class AmazonSqsQueue(ServiceBusOptions serviceBusOptions, AmazonSqsOption
         try
         {
             await _client.SendMessageAsync(new() { QueueUrl = _queueUrl, MessageBody = Convert.ToBase64String(await stream.ToBytesAsync()) }, cancellationToken).ConfigureAwait(false);
-
-            await _serviceBusOptions.MessageSent.InvokeAsync(new(this, message, stream), cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            await _serviceBusOptions.TransportOperation.InvokeAsync(new(this, "[enqueue/cancelled]"), cancellationToken);
         }
         finally
         {
             _lock.Release();
         }
+
+        await _hopperOptions.MessageSent.InvokeAsync(new(this, message, stream), cancellationToken);
     }
 
     public TransportType Type => TransportType.Queue;
@@ -235,6 +210,8 @@ public class AmazonSqsQueue(ServiceBusOptions serviceBusOptions, AmazonSqsOption
         }
 
         await _lock.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+
+        ReceivedMessage? receivedMessage;
 
         try
         {
@@ -257,25 +234,19 @@ public class AmazonSqsQueue(ServiceBusOptions serviceBusOptions, AmazonSqsOption
                 }
             }
 
-            var receivedMessage = _receivedMessages.Count > 0 ? _receivedMessages.Dequeue() : null;
-
-            if (receivedMessage != null)
-            {
-                await _serviceBusOptions.MessageReceived.InvokeAsync(new(this, receivedMessage), cancellationToken);
-            }
-
-            return receivedMessage;
-        }
-        catch (OperationCanceledException)
-        {
-            await _serviceBusOptions.TransportOperation.InvokeAsync(new(this, "[receive/cancelled]"), cancellationToken);
+            receivedMessage = _receivedMessages.Count > 0 ? _receivedMessages.Dequeue() : null;
         }
         finally
         {
             _lock.Release();
         }
 
-        return null;
+        if (receivedMessage != null)
+        {
+            await _hopperOptions.MessageReceived.InvokeAsync(new(this, receivedMessage), cancellationToken);
+        }
+
+        return receivedMessage;
     }
 
     public async ValueTask<bool> HasPendingAsync(CancellationToken cancellationToken = default)
@@ -287,14 +258,16 @@ public class AmazonSqsQueue(ServiceBusOptions serviceBusOptions, AmazonSqsOption
 
         if (!_queueUrlResolved)
         {
-            await _serviceBusOptions.TransportOperation.InvokeAsync(new(this, "[had-pending]", false), cancellationToken);
+            await _hopperOptions.TransportOperation.InvokeAsync(new(this, "[had-pending]", false), cancellationToken);
 
             return true;
         }
 
-        await _serviceBusOptions.TransportOperation.InvokeAsync(new(this, "[has-pending/starting]"), cancellationToken);
+        await _hopperOptions.TransportOperation.InvokeAsync(new(this, "[has-pending/starting]"), cancellationToken);
 
         await _lock.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+
+        bool result;
 
         try
         {
@@ -304,24 +277,17 @@ public class AmazonSqsQueue(ServiceBusOptions serviceBusOptions, AmazonSqsOption
                 AttributeNames = _isEmptyAttributeNames
             }, cancellationToken).Result;
 
-            var result =
-                response.ApproximateNumberOfMessages > 0 &&
-                response is { ApproximateNumberOfMessagesDelayed: > 0, ApproximateNumberOfMessagesNotVisible: > 0 };
-
-            await _serviceBusOptions.TransportOperation.InvokeAsync(new(this, "[has-pending]", result), cancellationToken);
-
-            return result;
-        }
-        catch (OperationCanceledException)
-        {
-            await _serviceBusOptions.TransportOperation.InvokeAsync(new(this, "[has-pending/cancelled]", false), cancellationToken);
+            result = response.ApproximateNumberOfMessages > 0 &&
+                     response is { ApproximateNumberOfMessagesDelayed: > 0, ApproximateNumberOfMessagesNotVisible: > 0 };
         }
         finally
         {
             _lock.Release();
         }
 
-        return false;
+        await _hopperOptions.TransportOperation.InvokeAsync(new(this, "[has-pending]", result), cancellationToken);
+
+        return result;
     }
 
     public async Task ReleaseAsync(object acknowledgementToken, CancellationToken cancellationToken = default)
@@ -346,12 +312,6 @@ public class AmazonSqsQueue(ServiceBusOptions serviceBusOptions, AmazonSqsOption
         {
             await _client.SendMessageAsync(new() { QueueUrl = _queueUrl, MessageBody = data.MessageBody }, cancellationToken).ConfigureAwait(false);
             await _client.DeleteMessageAsync(_queueUrl, data.ReceiptHandle, cancellationToken).ConfigureAwait(false);
-
-            await _serviceBusOptions.MessageReleased.InvokeAsync(new(this, acknowledgementToken), cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            await _serviceBusOptions.TransportOperation.InvokeAsync(new(this, "[release/cancelled]"), cancellationToken);
         }
         finally
         {
@@ -359,6 +319,8 @@ public class AmazonSqsQueue(ServiceBusOptions serviceBusOptions, AmazonSqsOption
         }
 
         _acknowledgementTokens.Remove(data.MessageId);
+
+        await _hopperOptions.MessageReleased.InvokeAsync(new(this, acknowledgementToken), cancellationToken);
     }
 
     private async Task GetQueueUrl(CancellationToken cancellationToken)
@@ -370,9 +332,6 @@ public class AmazonSqsQueue(ServiceBusOptions serviceBusOptions, AmazonSqsOption
             try
             {
                 _queueUrl = (await _client.GetQueueUrlAsync(new GetQueueUrlRequest { QueueName = Uri.TransportName }, cancellationToken).ConfigureAwait(false)).QueueUrl;
-            }
-            catch (OperationCanceledException)
-            {
             }
             catch (AggregateException ex) when (ex.InnerException is TaskCanceledException)
             {

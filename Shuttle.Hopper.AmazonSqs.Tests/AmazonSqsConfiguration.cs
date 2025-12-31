@@ -12,21 +12,24 @@ public static class AmazonSqsConfiguration
         var services = new ServiceCollection();
 
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
-        services.AddAmazonSqs(builder =>
+        services.AddHopper(hopperBuilder =>
         {
-            var amazonSqsOptions = new AmazonSqsOptions
+            hopperBuilder.UseAmazonSqs(builder =>
             {
-                WaitTime = TimeSpan.FromSeconds(1),
-                MaxMessages = 10,
-                AwsCredentials = new BasicAWSCredentials("test", "test"),
-                AmazonSqsConfig = new AmazonSQSConfig
+                var amazonSqsOptions = new AmazonSqsOptions
                 {
-                    ServiceURL = "http://localhost:9324", // ElasticMQ default
-                    AuthenticationRegion = "us-east-1"
-                }
-            };
+                    WaitTime = TimeSpan.FromSeconds(1),
+                    MaxMessages = 10,
+                    AwsCredentials = new BasicAWSCredentials("test", "test"),
+                    AmazonSqsConfig = new AmazonSQSConfig
+                    {
+                        ServiceURL = "http://localhost:9324", // ElasticMQ default
+                        AuthenticationRegion = "us-east-1"
+                    }
+                };
 
-            builder.AddOptions("local", amazonSqsOptions);
+                builder.AddOptions("local", amazonSqsOptions);
+            });
         });
 
         return services;

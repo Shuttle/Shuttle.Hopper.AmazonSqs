@@ -4,9 +4,9 @@ using Shuttle.Core.Contract;
 
 namespace Shuttle.Hopper.AmazonSqs;
 
-public class AmazonSqsQueueFactory(IOptions<ServiceBusOptions> serviceBusOptions, IOptionsMonitor<AmazonSqsOptions> amazonSqsOptions) : ITransportFactory
+public class AmazonSqsQueueFactory(IOptions<HopperOptions> hopperOptions, IOptionsMonitor<AmazonSqsOptions> amazonSqsOptions) : ITransportFactory
 {
-    private readonly ServiceBusOptions _serviceBusOptions = Guard.AgainstNull(Guard.AgainstNull(serviceBusOptions).Value);
+    private readonly HopperOptions _hopperOptions = Guard.AgainstNull(Guard.AgainstNull(hopperOptions).Value);
     private readonly IOptionsMonitor<AmazonSqsOptions> _amazonSqsOptions = Guard.AgainstNull(amazonSqsOptions);
 
     public string Scheme => "amazonsqs";
@@ -21,6 +21,6 @@ public class AmazonSqsQueueFactory(IOptions<ServiceBusOptions> serviceBusOptions
             throw new InvalidOperationException(string.Format(Hopper.Resources.TransportConfigurationNameException, transportUri.ConfigurationName));
         }
 
-        return Task.FromResult<ITransport>(new AmazonSqsQueue(_serviceBusOptions, amazonSqsOptions, transportUri));
+        return Task.FromResult<ITransport>(new AmazonSqsQueue(_hopperOptions, amazonSqsOptions, transportUri));
     }
 }
