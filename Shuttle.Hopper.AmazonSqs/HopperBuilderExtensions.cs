@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using Shuttle.Core.Contract;
 
 namespace Shuttle.Hopper.AmazonSqs;
 
