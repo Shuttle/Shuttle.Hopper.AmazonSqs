@@ -95,20 +95,20 @@ The configuration name (e.g., `local`, `production`) must match a configuration 
 
 AWS credentials can be configured in several ways:
 
-### 1. Programmatic Credentials
+### Programmatic Credentials
 
 ```c#
 amazonSqsOptions.AwsCredentials = new BasicAWSCredentials("accessKey", "secretKey");
 ```
 
-### 2. Environment Variables
+### Environment Variables
 
 If `AwsCredentials` is not set, the AWS SDK will automatically use credentials from:
 - `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` environment variables
 - AWS credentials file (`~/.aws/credentials`)
 - IAM role (when running on EC2 or ECS)
 
-### 3. IAM Roles (Recommended for Production)
+### IAM Roles (Recommended for Production)
 
 When running on AWS infrastructure, use IAM roles instead of hardcoded credentials.
 
