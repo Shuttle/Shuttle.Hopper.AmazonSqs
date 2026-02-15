@@ -1,10 +1,11 @@
 ﻿using Amazon.SQS;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Shuttle.Core.Contract;
 
 namespace Shuttle.Hopper.AmazonSqs;
 
-public class AmazonSqsQueueFactory(IOptions<HopperOptions> hopperOptions, IOptionsMonitor<AmazonSqsOptions> amazonSqsOptions) : ITransportFactory
+public class AmazonSqsQueueFactory(IOptions<HopperOptions> hopperOptions, IOptionsMonitor<AmazonSqsOptions> amazonSqsOptions, ILogger<AmazonSqsQueue>? logger = null) : ITransportFactory
 {
     private readonly HopperOptions _hopperOptions = Guard.AgainstNull(Guard.AgainstNull(hopperOptions).Value);
     private readonly IOptionsMonitor<AmazonSqsOptions> _amazonSqsOptions = Guard.AgainstNull(amazonSqsOptions);
@@ -21,6 +22,6 @@ public class AmazonSqsQueueFactory(IOptions<HopperOptions> hopperOptions, IOptio
             throw new InvalidOperationException(string.Format(Hopper.Resources.TransportConfigurationNameException, transportUri.ConfigurationName));
         }
 
-        return Task.FromResult<ITransport>(new AmazonSqsQueue(_hopperOptions, amazonSqsOptions, transportUri));
+        return Task.FromResult<ITransport>(new AmazonSqsQueue(_hopperOptions, amazonSqsOptions, transportUri, logger));
     }
 }

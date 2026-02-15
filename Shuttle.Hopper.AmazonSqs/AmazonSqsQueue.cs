@@ -1,13 +1,17 @@
 ﻿using Amazon.SQS;
 using Amazon.SQS.Model;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Shuttle.Core.Contract;
 using Shuttle.Core.Streams;
+using Shuttle.Hopper;
 
 namespace Shuttle.Hopper.AmazonSqs;
 
-public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazonSqsOptions, TransportUri uri)
+public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazonSqsOptions, TransportUri uri, ILogger<AmazonSqsQueue>? logger = null)
     : ITransport, ICreateTransport, IDeleteTransport, IPurgeTransport, IDisposable
 {
+    private readonly ILogger<AmazonSqsQueue> _logger = logger ?? NullLogger<AmazonSqsQueue>.Instance;
     private readonly Dictionary<string, AcknowledgementToken> _acknowledgementTokens = new();
     private readonly AmazonSqsOptions _amazonSqsOptions = Guard.AgainstNull(amazonSqsOptions);
 
@@ -32,6 +36,8 @@ public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazon
 
     public async Task CreateAsync(CancellationToken cancellationToken = default)
     {
+        LogMessage.Operation(_logger, Uri.Uri.Scheme, Uri.TransportName, "[create/starting]");
+
         await _hopperOptions.TransportOperation.InvokeAsync(new(this, "[create/starting]"), cancellationToken);
 
         await _lock.WaitAsync(CancellationToken.None).ConfigureAwait(false);
@@ -45,6 +51,8 @@ public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazon
         {
             _lock.Release();
         }
+
+        LogMessage.Operation(_logger, Uri.Uri.Scheme, Uri.TransportName, "[create/completed]");
 
         await _hopperOptions.TransportOperation.InvokeAsync(new(this, "[create/completed]"), cancellationToken);
     }
@@ -61,6 +69,8 @@ public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazon
             return;
         }
 
+        LogMessage.Operation(_logger, Uri.Uri.Scheme, Uri.TransportName, "[drop/starting]");
+
         await _hopperOptions.TransportOperation.InvokeAsync(new(this, "[drop/starting]"), cancellationToken);
 
         await _lock.WaitAsync(CancellationToken.None).ConfigureAwait(false);
@@ -73,6 +83,8 @@ public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazon
         {
             _lock.Release();
         }
+
+        LogMessage.Operation(_logger, Uri.Uri.Scheme, Uri.TransportName, "[drop/completed]");
 
         await _hopperOptions.TransportOperation.InvokeAsync(new(this, "[drop/completed]"), cancellationToken);
     }
@@ -114,6 +126,8 @@ public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazon
             return;
         }
 
+        LogMessage.Operation(_logger, Uri.Uri.Scheme, Uri.TransportName, "[purge/starting]");
+
         await _hopperOptions.TransportOperation.InvokeAsync(new(this, "[purge/starting]"), cancellationToken);
 
         await _lock.WaitAsync(CancellationToken.None).ConfigureAwait(false);
@@ -126,6 +140,8 @@ public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazon
         {
             _lock.Release();
         }
+
+        LogMessage.Operation(_logger, Uri.Uri.Scheme, Uri.TransportName, "[purge/completed]");
 
         await _hopperOptions.TransportOperation.InvokeAsync(new(this, "[purge/completed]"), cancellationToken);
     }
@@ -166,6 +182,8 @@ public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazon
             _lock.Release();
         }
 
+        LogMessage.MessageAcknowledged(_logger, Uri.Uri.Scheme, Uri.TransportName);
+
         await _hopperOptions.MessageAcknowledged.InvokeAsync(new(this, acknowledgementToken), cancellationToken);
     }
 
@@ -191,6 +209,8 @@ public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazon
         {
             _lock.Release();
         }
+
+        LogMessage.MessageEnqueued(_logger, Uri.Uri.Scheme, Uri.TransportName, message.MessageType, message.MessageId);
 
         await _hopperOptions.MessageSent.InvokeAsync(new(this, message, stream), cancellationToken);
     }
@@ -243,6 +263,8 @@ public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazon
 
         if (receivedMessage != null)
         {
+            LogMessage.MessageReceived(_logger, Uri.Uri.Scheme, Uri.TransportName);
+
             await _hopperOptions.MessageReceived.InvokeAsync(new(this, receivedMessage), cancellationToken);
         }
 
@@ -258,10 +280,14 @@ public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazon
 
         if (!_queueUrlResolved)
         {
+            LogMessage.Operation(_logger, Uri.Uri.Scheme, Uri.TransportName, "[had-pending]");
+
             await _hopperOptions.TransportOperation.InvokeAsync(new(this, "[had-pending]", false), cancellationToken);
 
             return true;
         }
+
+        LogMessage.Operation(_logger, Uri.Uri.Scheme, Uri.TransportName, "[has-pending/starting]");
 
         await _hopperOptions.TransportOperation.InvokeAsync(new(this, "[has-pending/starting]"), cancellationToken);
 
@@ -284,6 +310,8 @@ public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazon
         {
             _lock.Release();
         }
+
+        LogMessage.Operation(_logger, Uri.Uri.Scheme, Uri.TransportName, "[has-pending]");
 
         await _hopperOptions.TransportOperation.InvokeAsync(new(this, "[has-pending]", result), cancellationToken);
 
@@ -319,6 +347,8 @@ public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazon
         }
 
         _acknowledgementTokens.Remove(data.MessageId);
+
+        LogMessage.MessageReleased(_logger, Uri.Uri.Scheme, Uri.TransportName);
 
         await _hopperOptions.MessageReleased.InvokeAsync(new(this, acknowledgementToken), cancellationToken);
     }
