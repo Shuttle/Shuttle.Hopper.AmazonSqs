@@ -1,5 +1,4 @@
 ﻿using Amazon.Runtime;
-using Amazon.SQS;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -12,25 +11,21 @@ public static class AmazonSqsConfiguration
         var services = new ServiceCollection();
 
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
-        services.AddHopper(hopperBuilder =>
-        {
-            hopperBuilder.UseAmazonSqs(builder =>
+        services.AddHopper()
+            .UseAmazonSqs(builder =>
             {
-                var amazonSqsOptions = new AmazonSqsOptions
+                builder.Configure("local", options =>
                 {
-                    WaitTime = TimeSpan.FromSeconds(1),
-                    MaxMessages = 10,
-                    AwsCredentials = new BasicAWSCredentials("test", "test"),
-                    AmazonSqsConfig = new AmazonSQSConfig
+                    options.WaitTime = TimeSpan.FromSeconds(1);
+                    options.MaxMessages = 10;
+                    options.AwsCredentials = new BasicAWSCredentials("test", "test");
+                    options.AmazonSqsConfig = new()
                     {
                         ServiceURL = "http://localhost:9324", // ElasticMQ default
                         AuthenticationRegion = "us-east-1"
-                    }
-                };
-
-                builder.AddOptions("local", amazonSqsOptions);
+                    };
+                });
             });
-        });
 
         return services;
     }

@@ -1,22 +1,18 @@
-﻿using Microsoft.Extensions.DependencyInjection;
-using Shuttle.Core.Contract;
+﻿using Shuttle.Core.Contract;
 
 namespace Shuttle.Hopper.AmazonSqs;
 
-public class AmazonSqsBuilder(IServiceCollection services)
+public class AmazonSqsBuilder
 {
-    internal readonly Dictionary<string, AmazonSqsOptions> AmazonSqsOptions = new();
+    internal readonly Dictionary<string, Action<AmazonSqsOptions>> AmazonSqsConfigureOptions = new();
 
-    public IServiceCollection Services { get; } = Guard.AgainstNull(services);
-
-    public AmazonSqsBuilder AddOptions(string name, AmazonSqsOptions amazonSqsOptions)
+    public AmazonSqsBuilder Configure(string name, Action<AmazonSqsOptions> configure)
     {
         Guard.AgainstEmpty(name);
-        Guard.AgainstNull(amazonSqsOptions);
+        Guard.AgainstNull(configure);
 
-        AmazonSqsOptions.Remove(name);
-
-        AmazonSqsOptions.Add(name, amazonSqsOptions);
+        AmazonSqsConfigureOptions.Remove(name);
+        AmazonSqsConfigureOptions.Add(name, configure);
 
         return this;
     }

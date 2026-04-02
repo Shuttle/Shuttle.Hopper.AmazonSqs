@@ -13,7 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="AWSSDK.SQS" Version="4.0.2.8" />
+    <PackageReference Include="AWSSDK.SQS" Version="4.0.2.22" />
     <ProjectReference Include="..\..\Shuttle.Hopper\Shuttle.Hopper\Shuttle.Hopper.csproj" />
   </ItemGroup>
 
@@ -34,7 +34,7 @@
 
   <PropertyGroup>
     <Description>Amazon Simple Queue Service implementation for use with Shuttle.Hopper.</Description>
-    <Version>21.0.1-rc2</Version>
+    <Version>21.0.1-rc3</Version>
     <PackageProjectUrl>https://github.com/Shuttle/Shuttle.Hopper.AzureMQ</PackageProjectUrl>
     <RepositoryUrl>https://github.com/Shuttle/Shuttle.Hopper.AzureMQ.git</RepositoryUrl>
     <PackageTags>aws sqs amazonsqs amazonmq awssqs awsmq</PackageTags>

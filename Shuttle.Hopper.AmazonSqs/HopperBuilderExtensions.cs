@@ -10,18 +10,15 @@ public static class HopperBuilderExtensions
         {
             var services = hopperBuilder.Services;
 
-            var amazonSqsBuilder = new AmazonSqsBuilder(services);
+            var amazonSqsBuilder = new AmazonSqsBuilder();
 
             builder?.Invoke(amazonSqsBuilder);
 
-            foreach (var pair in amazonSqsBuilder.AmazonSqsOptions)
+            foreach (var pair in amazonSqsBuilder.AmazonSqsConfigureOptions)
             {
                 services.AddOptions<AmazonSqsOptions>(pair.Key).Configure(options =>
                 {
-                    options.AwsCredentials = pair.Value.AwsCredentials;
-                    options.AmazonSqsConfig = pair.Value.AmazonSqsConfig;
-                    options.MaxMessages = pair.Value.MaxMessages;
-                    options.WaitTime = pair.Value.WaitTime;
+                    pair.Value(options);
 
                     if (options.MaxMessages < 1)
                     {
