@@ -5,10 +5,9 @@ namespace Shuttle.Hopper.AmazonSqs.Tests;
 
 public class AmazonSqsQueueOutboxFixture : OutboxFixture
 {
-    [TestCase(true)]
-    [TestCase(false)]
-    public async Task Should_be_able_handle_errors_async(bool isTransactionalEndpoint)
+    [Test]
+    public async Task Should_be_able_handle_errors_async()
     {
-        await TestOutboxSendingAsync(AmazonSqsConfiguration.GetServiceCollection(), "amazonsqs://local/{0}", 3, isTransactionalEndpoint);
+        await TestOutboxSendingAsync(AmazonSqsConfiguration.GetServiceCollection(), "amazonsqs://local/{0}", 3);
     }
 }
