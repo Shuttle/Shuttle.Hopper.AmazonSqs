@@ -1,7 +1,7 @@
 ﻿using Amazon.SQS;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Shuttle.Core.Contract;
+using Shuttle.Contract;
 
 namespace Shuttle.Hopper.AmazonSqs;
 

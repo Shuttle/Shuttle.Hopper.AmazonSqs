@@ -2,9 +2,9 @@
 using Amazon.SQS.Model;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Shuttle.Core.Contract;
-using Shuttle.Core.Streams;
-using Shuttle.Hopper;
+using Shuttle.Contract;
+using Shuttle.Streams;
+using Shuttle.Pipelines;
 
 namespace Shuttle.Hopper.AmazonSqs;
 
@@ -187,10 +187,12 @@ public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazon
         await _hopperOptions.MessageAcknowledged.InvokeAsync(new(this, acknowledgementToken), cancellationToken);
     }
 
-    public async Task SendAsync(TransportMessage message, Stream stream, CancellationToken cancellationToken = default)
+    public async Task SendAsync(Stream stream, IState state, CancellationToken cancellationToken = default)
     {
-        Guard.AgainstNull(message);
-        Guard.AgainstNull(stream);
+        ArgumentNullException.ThrowIfNull(stream);
+        ArgumentNullException.ThrowIfNull(state);
+
+        var transportMessage = Guard.AgainstNull(state.GetTransportMessage());
 
         if (!_initialized)
         {
@@ -210,9 +212,9 @@ public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazon
             _lock.Release();
         }
 
-        LogMessage.MessageEnqueued(_logger, Uri.Uri.Scheme, Uri.TransportName, message.MessageType, message.MessageId);
+        LogMessage.MessageEnqueued(_logger, Uri.Uri.Scheme, Uri.TransportName, transportMessage.MessageType, transportMessage.MessageId);
 
-        await _hopperOptions.MessageSent.InvokeAsync(new(this, message, stream), cancellationToken);
+        await _hopperOptions.MessageSent.InvokeAsync(new(this, transportMessage, stream), cancellationToken);
     }
 
     public TransportType Type => TransportType.Queue;

@@ -14,7 +14,7 @@
 
   <ItemGroup>
     <PackageReference Include="AWSSDK.SQS" Version="4.0.2.23" />
-    <ProjectReference Include="..\..\Shuttle.Hopper\Shuttle.Hopper\Shuttle.Hopper.csproj" />
+    <PackageReference Include="Shuttle.Hopper" Version="21.0.1-rc3" />
   </ItemGroup>
 
   <ItemGroup>
