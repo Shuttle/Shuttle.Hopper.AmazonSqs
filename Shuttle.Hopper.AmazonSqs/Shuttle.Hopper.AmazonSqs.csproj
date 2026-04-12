@@ -34,7 +34,7 @@
 
   <PropertyGroup>
     <Description>Amazon Simple Queue Service implementation for use with Shuttle.Hopper.</Description>
-    <Version>21.0.1-rc3</Version>
+    <Version>21.0.1-rc4</Version>
     <PackageProjectUrl>https://github.com/Shuttle/Shuttle.Hopper.AzureMQ</PackageProjectUrl>
     <RepositoryUrl>https://github.com/Shuttle/Shuttle.Hopper.AzureMQ.git</RepositoryUrl>
     <PackageTags>aws sqs amazonsqs amazonmq awssqs awsmq</PackageTags>

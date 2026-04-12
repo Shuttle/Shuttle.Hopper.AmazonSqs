@@ -10,37 +10,22 @@ public static class HopperBuilderExtensions
         {
             var services = hopperBuilder.Services;
 
-            var amazonSqsBuilder = new AmazonSqsBuilder();
+            builder?.Invoke(new(services));
 
-            builder?.Invoke(amazonSqsBuilder);
-
-            foreach (var pair in amazonSqsBuilder.AmazonSqsConfigureOptions)
+            services.PostConfigureAll<AmazonSqsOptions>(options =>
             {
-                services.AddOptions<AmazonSqsOptions>(pair.Key).Configure(options =>
+                options.MaxMessages = Math.Clamp(options.MaxMessages, 1, 10);
+
+                if (options.WaitTime < TimeSpan.Zero)
                 {
-                    pair.Value(options);
+                    options.WaitTime = TimeSpan.Zero;
+                }
 
-                    if (options.MaxMessages < 1)
-                    {
-                        options.MaxMessages = 1;
-                    }
-
-                    if (options.MaxMessages > 10)
-                    {
-                        options.MaxMessages = 10;
-                    }
-
-                    if (options.WaitTime < TimeSpan.Zero)
-                    {
-                        options.WaitTime = TimeSpan.Zero;
-                    }
-
-                    if (options.WaitTime > TimeSpan.FromSeconds(20))
-                    {
-                        options.WaitTime = TimeSpan.FromSeconds(20);
-                    }
-                });
-            }
+                if (options.WaitTime > TimeSpan.FromSeconds(20))
+                {
+                    options.WaitTime = TimeSpan.FromSeconds(20);
+                }
+            });
 
             services.AddSingleton<ITransportFactory, AmazonSqsQueueFactory>();
 
