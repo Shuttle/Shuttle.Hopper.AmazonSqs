@@ -23,19 +23,17 @@ services.AddHopper(hopperBuilder =>
 {
     hopperBuilder.UseAmazonSqs(builder =>
     {
-        var amazonSqsOptions = new AmazonSqsOptions
+        builder.Configure("local", options =>
         {
-            AwsCredentials = new BasicAWSCredentials("accessKey", "secretKey"),
-            AmazonSqsConfig = new AmazonSQSConfig
+            options.AwsCredentials = new BasicAWSCredentials("accessKey", "secretKey");
+            options.AmazonSqsConfig = new AmazonSQSConfig
             {
                 ServiceURL = "http://localhost:9324",
                 AuthenticationRegion = "us-east-1"
-            },
-            MaxMessages = 5,
-            WaitTime = TimeSpan.FromSeconds(20)
-        };
-
-        builder.AddOptions("local", amazonSqsOptions);
+            };
+            options.MaxMessages = 5;
+            options.WaitTime = TimeSpan.FromSeconds(20);
+        });
     });
 });
 ```
@@ -77,9 +75,9 @@ amazonsqs://local/my-queue
 amazonsqs://production/order-processing-queue
 ```
 
-The configuration name (e.g., `local`, `production`) must match a configuration defined via `AddOptions()`.
+The configuration name (e.g., `local`, `production`) must match a configuration defined via `builder.Configure("name", ...)`.
 
-## Options
+## `AmazonSqsOptions`
 
 | Option | Default | Description |
 | --- | --- | --- |
@@ -98,7 +96,7 @@ AWS credentials can be configured in several ways:
 ### Programmatic Credentials
 
 ```c#
-amazonSqsOptions.AwsCredentials = new BasicAWSCredentials("accessKey", "secretKey");
+options.AwsCredentials = new BasicAWSCredentials("accessKey", "secretKey");
 ```
 
 ### Environment Variables
@@ -130,4 +128,4 @@ If you encounter authentication errors:
 
 ### Configuration Name Mismatch
 
-The configuration name in the URI (e.g., `amazonsqs://local/queue-name`) must exactly match a configuration added via `builder.AddOptions("local", ...)`. Configuration names are case-sensitive.
+The configuration name in the URI (e.g., `amazonsqs://local/queue-name`) must exactly match a configuration added via `builder.Configure("local", ...)`. Configuration names are case-sensitive.
