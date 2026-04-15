@@ -19,14 +19,13 @@ The URI structure is `amazonsqs://configuration-name/queue-name`.
 ### Programmatic Configuration
 
 ```c#
-services.AddHopper(hopperBuilder =>
-{
-    hopperBuilder.UseAmazonSqs(builder =>
+services.AddHopper()
+    .UseAmazonSqs(builder =>
     {
         builder.Configure("local", options =>
         {
             options.AwsCredentials = new BasicAWSCredentials("accessKey", "secretKey");
-            options.AmazonSqsConfig = new AmazonSQSConfig
+            options.AmazonSqsConfig = new()
             {
                 ServiceURL = "http://localhost:9324",
                 AuthenticationRegion = "us-east-1"
@@ -35,7 +34,6 @@ services.AddHopper(hopperBuilder =>
             options.WaitTime = TimeSpan.FromSeconds(20);
         });
     });
-});
 ```
 
 ### JSON Configuration
