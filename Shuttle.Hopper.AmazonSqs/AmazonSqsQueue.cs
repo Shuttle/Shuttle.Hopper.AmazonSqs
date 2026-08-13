@@ -8,16 +8,13 @@ using Shuttle.Pipelines;
 
 namespace Shuttle.Hopper.AmazonSqs;
 
-public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazonSqsOptions, TransportUri uri, ILogger<AmazonSqsQueue>? logger = null)
-    : ITransport, ICreateTransport, IDeleteTransport, IPurgeTransport, IDisposable
+public class AmazonSqsQueue : ITransport, ICreateTransport, IDeleteTransport, IPurgeTransport, IDisposable
 {
-    private readonly ILogger<AmazonSqsQueue> _logger = logger ?? NullLogger<AmazonSqsQueue>.Instance;
+    private readonly ILogger<AmazonSqsQueue> _logger;
     private readonly Dictionary<string, AcknowledgementToken> _acknowledgementTokens = new();
-    private readonly AmazonSqsOptions _amazonSqsOptions = Guard.AgainstNull(amazonSqsOptions);
+    private readonly AmazonSqsOptions _amazonSqsOptions;
 
-    private readonly AmazonSQSClient _client = amazonSqsOptions.AwsCredentials == null
-        ? new(amazonSqsOptions.AmazonSqsConfig ?? new AmazonSQSConfig())
-        : new(amazonSqsOptions.AwsCredentials, amazonSqsOptions.AmazonSqsConfig ?? new AmazonSQSConfig());
+    private readonly AmazonSQSClient _client;
 
     private readonly List<string> _isEmptyAttributeNames =
     [
@@ -29,10 +26,38 @@ public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazon
     private readonly SemaphoreSlim _lock = new(1, 1);
     private readonly TimeSpan _operationTimeout = TimeSpan.FromSeconds(30);
     private readonly Queue<ReceivedMessage> _receivedMessages = new();
-    private readonly HopperOptions _hopperOptions = Guard.AgainstNull(hopperOptions);
+    private readonly HopperOptions _hopperOptions;
     private bool _initialized;
     private string _queueUrl = string.Empty;
     private bool _queueUrlResolved;
+
+    // matches the Amazon SQS service default applied when no visibility timeout is specified
+    private readonly TimeSpan _visibilityTimeout;
+    private readonly Timer _visibilityTimeoutRenewalTimer;
+
+    public AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazonSqsOptions, TransportUri uri, ILogger<AmazonSqsQueue>? logger = null)
+    {
+        _logger = logger ?? NullLogger<AmazonSqsQueue>.Instance;
+        _hopperOptions = Guard.AgainstNull(hopperOptions);
+        _amazonSqsOptions = Guard.AgainstNull(amazonSqsOptions);
+
+        Uri = Guard.AgainstNull(uri);
+
+        _client = amazonSqsOptions.AwsCredentials == null
+            ? new(amazonSqsOptions.AmazonSqsConfig ?? new AmazonSQSConfig())
+            : new(amazonSqsOptions.AwsCredentials, amazonSqsOptions.AmazonSqsConfig ?? new AmazonSQSConfig());
+
+        _visibilityTimeout = _amazonSqsOptions.VisibilityTimeout ?? TimeSpan.FromSeconds(30);
+
+        var renewalInterval = TimeSpan.FromTicks(_visibilityTimeout.Ticks / 2);
+
+        if (renewalInterval < TimeSpan.FromSeconds(1))
+        {
+            renewalInterval = TimeSpan.FromSeconds(1);
+        }
+
+        _visibilityTimeoutRenewalTimer = new(OnVisibilityTimeoutRenewalTimer, null, renewalInterval, renewalInterval);
+    }
 
     public async Task CreateAsync(CancellationToken cancellationToken = default)
     {
@@ -91,6 +116,8 @@ public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazon
 
     public void Dispose()
     {
+        _visibilityTimeoutRenewalTimer.Dispose();
+
         if (!_queueUrlResolved)
         {
             return;
@@ -146,9 +173,9 @@ public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazon
         await _hopperOptions.TransportOperation.InvokeAsync(new(this, "[purge/completed]"), cancellationToken);
     }
 
-    public TransportUri Uri { get; } = Guard.AgainstNull(uri);
+    public TransportUri Uri { get; }
 
-    public async Task AcknowledgeAsync(object acknowledgementToken, CancellationToken cancellationToken = default)
+    public async Task AcknowledgeAsync(object acknowledgementToken, IPipeline pipeline, CancellationToken cancellationToken = default)
     {
         Guard.AgainstNull(acknowledgementToken);
 
@@ -184,15 +211,15 @@ public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazon
 
         LogMessage.MessageAcknowledged(_logger, Uri.Uri.Scheme, Uri.TransportName);
 
-        await _hopperOptions.MessageAcknowledged.InvokeAsync(new(this, acknowledgementToken), cancellationToken);
+        await _hopperOptions.MessageAcknowledged.InvokeAsync(new(this, acknowledgementToken, pipeline), cancellationToken);
     }
 
-    public async Task SendAsync(Stream stream, IState state, CancellationToken cancellationToken = default)
+    public async Task SendAsync(Stream stream, IPipeline pipeline, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(stream);
-        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(pipeline);
 
-        var transportMessage = Guard.AgainstNull(state.GetTransportMessage());
+        var transportMessage = Guard.AgainstNull(pipeline.State.GetTransportMessage());
 
         if (!_initialized)
         {
@@ -214,12 +241,12 @@ public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazon
 
         LogMessage.MessageEnqueued(_logger, Uri.Uri.Scheme, Uri.TransportName, transportMessage.MessageType, transportMessage.MessageId);
 
-        await _hopperOptions.MessageSent.InvokeAsync(new(this, transportMessage, stream), cancellationToken);
+        await _hopperOptions.MessageSent.InvokeAsync(new(this, stream, pipeline), cancellationToken);
     }
 
     public TransportType Type => TransportType.Queue;
 
-    public async Task<ReceivedMessage?> ReceiveAsync(CancellationToken cancellationToken = default)
+    public async Task<ReceivedMessage?> ReceiveAsync(IPipeline pipeline, CancellationToken cancellationToken = default)
     {
         if (!_initialized)
         {
@@ -243,7 +270,8 @@ public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazon
                 {
                     QueueUrl = _queueUrl,
                     MaxNumberOfMessages = _amazonSqsOptions.MaxMessages,
-                    WaitTimeSeconds = (int)_amazonSqsOptions.WaitTime.TotalSeconds
+                    WaitTimeSeconds = (int)_amazonSqsOptions.WaitTime.TotalSeconds,
+                    VisibilityTimeout = (int)_visibilityTimeout.TotalSeconds
                 }, cancellationToken).ConfigureAwait(false);
 
                 foreach (var message in messages.Messages)
@@ -267,7 +295,7 @@ public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazon
         {
             LogMessage.MessageReceived(_logger, Uri.Uri.Scheme, Uri.TransportName);
 
-            await _hopperOptions.MessageReceived.InvokeAsync(new(this, receivedMessage), cancellationToken);
+            await _hopperOptions.MessageReceived.InvokeAsync(new(this, receivedMessage, pipeline), cancellationToken);
         }
 
         return receivedMessage;
@@ -320,7 +348,7 @@ public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazon
         return result;
     }
 
-    public async Task ReleaseAsync(object acknowledgementToken, CancellationToken cancellationToken = default)
+    public async Task ReleaseAsync(object acknowledgementToken, IPipeline pipeline, CancellationToken cancellationToken = default)
     {
         Guard.AgainstNull(acknowledgementToken);
 
@@ -352,7 +380,7 @@ public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazon
 
         LogMessage.MessageReleased(_logger, Uri.Uri.Scheme, Uri.TransportName);
 
-        await _hopperOptions.MessageReleased.InvokeAsync(new(this, acknowledgementToken), cancellationToken);
+        await _hopperOptions.MessageReleased.InvokeAsync(new(this, acknowledgementToken, pipeline), cancellationToken);
     }
 
     private async Task GetQueueUrl(CancellationToken cancellationToken)
@@ -388,6 +416,43 @@ public class AmazonSqsQueue(HopperOptions hopperOptions, AmazonSqsOptions amazon
         if (!_queueUrlResolved)
         {
             throw new ApplicationException(string.Format(Resources.QueueUrlNotResolvedException, Uri.TransportName));
+        }
+    }
+
+    private void OnVisibilityTimeoutRenewalTimer(object? state)
+    {
+        _ = RenewVisibilityTimeoutsAsync();
+    }
+
+    private async Task RenewVisibilityTimeoutsAsync()
+    {
+        if (!_queueUrlResolved)
+        {
+            return;
+        }
+
+        if (!await _lock.WaitAsync(0).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        try
+        {
+            foreach (var acknowledgementToken in _acknowledgementTokens.Values)
+            {
+                try
+                {
+                    await _client.ChangeMessageVisibilityAsync(_queueUrl, acknowledgementToken.ReceiptHandle, (int)_visibilityTimeout.TotalSeconds, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to renew the visibility timeout for message '{MessageId}' on transport '{TransportName}' ({Scheme}).", acknowledgementToken.MessageId, Uri.TransportName, Uri.Uri.Scheme);
+                }
+            }
+        }
+        finally
+        {
+            _lock.Release();
         }
     }
 
