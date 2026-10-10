@@ -127,10 +127,18 @@ public class AmazonSqsQueue : ITransport, ICreateTransport, IDeleteTransport, IP
 
         try
         {
+            // making the message visible again returns it to the queue without creating a duplicate; a receipt handle
+            // that is no longer valid means the message has already been deleted or re-received, so nothing remains to release
             foreach (var acknowledgementToken in _acknowledgementTokens.Values)
             {
-                _client.SendMessageAsync(new() { QueueUrl = _queueUrl, MessageBody = acknowledgementToken.MessageBody }).Wait(_operationTimeout);
-                _client.DeleteMessageAsync(_queueUrl, acknowledgementToken.ReceiptHandle).Wait(_operationTimeout);
+                try
+                {
+                    _client.ChangeMessageVisibilityAsync(_queueUrl, acknowledgementToken.ReceiptHandle, 0, CancellationToken.None).Wait(_operationTimeout);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to release message '{MessageId}' on transport '{TransportName}' ({Scheme}) during disposal.", acknowledgementToken.MessageId, Uri.TransportName, Uri.Uri.Scheme);
+                }
             }
 
             _acknowledgementTokens.Clear();
@@ -186,22 +194,17 @@ public class AmazonSqsQueue : ITransport, ICreateTransport, IDeleteTransport, IP
 
         GuardAgainstUnresolvedQueueUrl();
 
-        await _lock.WaitAsync(CancellationToken.None).ConfigureAwait(false);
-
-        if (!_queueUrlResolved)
-        {
-            await GetQueueUrl(cancellationToken);
-        }
-
         if (acknowledgementToken is not AcknowledgementToken data)
         {
             return;
         }
 
-        _acknowledgementTokens.Remove(data.MessageId);
+        await _lock.WaitAsync(CancellationToken.None).ConfigureAwait(false);
 
         try
         {
+            _acknowledgementTokens.Remove(data.MessageId);
+
             await _client.DeleteMessageAsync(_queueUrl, data.ReceiptHandle, cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -278,7 +281,8 @@ public class AmazonSqsQueue : ITransport, ICreateTransport, IDeleteTransport, IP
                 {
                     var acknowledgementToken = new AcknowledgementToken(message.MessageId, message.Body, message.ReceiptHandle);
 
-                    _acknowledgementTokens.TryAdd(acknowledgementToken.MessageId, acknowledgementToken);
+                    // a re-delivered message invalidates the earlier receipt handle, so the latest token has to be kept
+                    _acknowledgementTokens[acknowledgementToken.MessageId] = acknowledgementToken;
 
                     _receivedMessages.Enqueue(new(new MemoryStream(Convert.FromBase64String(message.Body)), acknowledgementToken));
                 }
@@ -369,14 +373,16 @@ public class AmazonSqsQueue : ITransport, ICreateTransport, IDeleteTransport, IP
         try
         {
             await _client.SendMessageAsync(new() { QueueUrl = _queueUrl, MessageBody = data.MessageBody }, cancellationToken).ConfigureAwait(false);
-            await _client.DeleteMessageAsync(_queueUrl, data.ReceiptHandle, cancellationToken).ConfigureAwait(false);
+
+            // once the copy has been sent the original has to be deleted, else cancellation could leave a duplicate or a stale token
+            _acknowledgementTokens.Remove(data.MessageId);
+
+            await _client.DeleteMessageAsync(_queueUrl, data.ReceiptHandle, CancellationToken.None).ConfigureAwait(false);
         }
         finally
         {
             _lock.Release();
         }
-
-        _acknowledgementTokens.Remove(data.MessageId);
 
         LogMessage.MessageReleased(_logger, Uri.Uri.Scheme, Uri.TransportName);
 
