@@ -5,7 +5,7 @@ namespace Shuttle.Hopper.AmazonSqs;
 
 public class AmazonSqsOptions
 {
-    public const string SectionName = "Shuttle:AmazonSqs";
+    public const string SectionName = "Shuttle:Hopper:AmazonSqs";
     public AWSCredentials? AwsCredentials { get; set; }
     public AmazonSQSConfig? AmazonSqsConfig { get; set; }
     public int MaxMessages { get; set; } = 10;

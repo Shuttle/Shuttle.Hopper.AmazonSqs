@@ -43,19 +43,21 @@ The default JSON settings structure is as follows:
 ```json
 {
   "Shuttle": {
-    "AmazonSqs": {
-      "local": {
-        "MaxMessages": 5,
-        "WaitTime": "00:00:20",
-        "AmazonSqsConfig": {
-          "ServiceURL": "http://localhost:9324"
-        }
-      },
-      "production": {
-        "MaxMessages": 10,
-        "WaitTime": "00:00:20",
-        "AmazonSqsConfig": {
-          "ServiceURL": "https://sqs.us-east-2.amazonaws.com/123456789012/MyQueue"
+    "Hopper": {
+      "AmazonSqs": {
+        "local": {
+          "MaxMessages": 5,
+          "WaitTime": "00:00:20",
+          "AmazonSqsConfig": {
+            "ServiceURL": "http://localhost:9324"
+          }
+        },
+        "production": {
+          "MaxMessages": 10,
+          "WaitTime": "00:00:20",
+          "AmazonSqsConfig": {
+            "ServiceURL": "https://sqs.us-east-2.amazonaws.com/123456789012/MyQueue"
+          }
         }
       }
     }
